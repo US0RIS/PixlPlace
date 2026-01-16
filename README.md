@@ -120,3 +120,129 @@ SQLite database: `pixelcanvas.db` (auto-created)
 - Cost increment: 1000 credits per level ($0.10)
 - Transactions are atomic via SQLite IMMEDIATE isolation
 - Rate limiting uses in-memory dict (will reset on restart)
+
+# Pixel Canvas - Phase 2: Basic UI
+
+## What's New in Phase 2
+
+### Landing Page (`/`)
+- **Canvas-first design** with live board preview
+- **Grid brutalism aesthetic** with neon accents
+- **Animated background** grid
+- **Live stats display** showing:
+  - Total pixels placed
+  - This week's placements  
+  - Current price cap
+- **Smooth animations** and glitch effects
+- Auto-refreshing board preview (30s intervals)
+
+### Canvas Page (`/canvas.html`)
+- **Interactive pixel canvas** with:
+  - Zoom controls (mousewheel, +/- buttons)
+  - Pan controls (middle-click or shift+drag)
+  - Pixel-perfect rendering
+  - Grid overlay when zoomed in
+- **Color picker** with:
+  - 16 preset colors
+  - Custom color selector
+  - Visual selection indicators
+- **Pixel hover info** showing:
+  - Position (x, y)
+  - Current color
+  - Placement cost
+  - Owner ID
+  - Ad status
+- **Placement interface**:
+  - "Mark as Advertisement" checkbox
+  - Real-time credit balance
+  - One-click placement
+  - Rate limit handling
+- **Live notifications** for:
+  - Successful placements
+  - Errors (insufficient credits, rate limits)
+  - Network issues
+- **Mock login system** (demo for Phase 2)
+
+### Design Features
+- **Retro arcade aesthetic** using Press Start 2P font
+- **Cyberpunk color palette**: cyan, pink, yellow accents on dark bg
+- **Smooth animations**: hover states, button interactions, notifications
+- **Responsive layout** (mobile-friendly)
+- **Pixelated rendering** for authentic pixel art look
+
+### Placeholder Pages
+- `/leaderboards.html` - Coming in Phase 4
+- `/archives.html` - Coming in Phase 4
+
+## File Structure
+
+```
+/
+├── main.py (updated with static file serving)
+├── static/
+│   ├── index.html (landing page)
+│   ├── canvas.html (interactive canvas)
+│   ├── leaderboards.html (placeholder)
+│   └── archives.html (placeholder)
+└── pixelcanvas.db (database)
+```
+
+## Running Phase 2
+
+1. Start the server:
+   ```bash
+   python main.py
+   ```
+
+2. Open browser to: `http://localhost:5000/`
+
+3. Navigate:
+   - Landing page shows live board preview
+   - Click canvas preview or "Enter Canvas" button
+   - Click "Login" to create demo user (gets 500k credits)
+   - Select color, hover over pixels, click to place
+
+## What Works
+
+✓ Landing page with live board preview
+✓ Interactive canvas with zoom/pan
+✓ Color picker (presets + custom)
+✓ Hover info showing pixel details
+✓ Placement with real-time updates
+✓ Credit tracking
+✓ Rate limiting feedback
+✓ Cost calculation display
+✓ Ad checkbox
+✓ Notifications for success/error
+✓ Auto-refresh (board updates every 10s in canvas)
+
+## What's NOT in Phase 2
+
+- Real authentication (using mock login)
+- Undo functionality
+- Ad penalties/saturation
+- Reporting system
+- Leaderboards
+- Archives
+- Stripe integration
+
+## Testing Phase 2
+
+1. Open homepage - see live board preview
+2. Click "Login" - enter any username
+3. Click "Enter Canvas"
+4. Use mouse wheel to zoom
+5. Shift+drag or middle-click to pan
+6. Hover over pixels to see info
+7. Click to select position
+8. Choose color
+9. Click "Place Pixel"
+10. Watch credits deduct and pixel appear
+
+## Next: Phase 3
+
+Phase 3 will add:
+- Undo functionality
+- Ad labeling enforcement
+- Dynamic price cap logic
+- Reporting + freeze mechanism
