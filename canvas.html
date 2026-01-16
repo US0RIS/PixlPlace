@@ -255,6 +255,46 @@
             cursor: not-allowed;
         }
 
+        /* Undo and Report Buttons */
+        .undo-btn, .report-btn {
+            width: 100%;
+            padding: 0.8rem;
+            border: none;
+            font-weight: 700;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 0.5rem;
+        }
+
+        .undo-btn {
+            background: var(--accent-yellow);
+            color: var(--bg-dark);
+        }
+
+        .undo-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(255, 190, 11, 0.4);
+        }
+
+        .report-btn {
+            background: rgba(255, 0, 110, 0.2);
+            color: var(--accent-pink);
+            border: 1px solid var(--accent-pink);
+        }
+
+        .report-btn:hover:not(:disabled) {
+            background: var(--accent-pink);
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        .undo-btn:disabled, .report-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
         /* Notification */
         .notification {
             position: fixed;
@@ -390,6 +430,11 @@
             </div>
 
             <button class="place-btn" id="placeBtn" disabled>Place Pixel</button>
+            
+            <div class="section" style="margin-top: 1rem;">
+                <button class="undo-btn" id="undoBtn" disabled>Undo Last Placement</button>
+                <button class="report-btn" id="reportBtn" disabled>Report Pixel</button>
+            </div>
         </aside>
     </div>
 
@@ -400,6 +445,7 @@
         const BOARD_SIZE = 1024;
         const CANVAS_SIZE = 800; // Display size
         const API_BASE = '';
+        const UNDO_WINDOW_MS = 300000; // 5 minutes
 
         // State
         let currentUser = null;
@@ -409,6 +455,8 @@
         let zoomLevel = 1;
         let panX = 0;
         let panY = 0;
+        let lastPlacementId = null;
+        let lastPlacementTime = null;
 
         // DOM elements
         const canvas = document.getElementById('pixelCanvas');
@@ -420,6 +468,8 @@
         const notification = document.getElementById('notification');
         const creditDisplay = document.getElementById('creditDisplay');
         const loginBtn = document.getElementById('loginBtn');
+        const undoBtn = document.getElementById('undoBtn');
+        const reportBtn = document.getElementById('reportBtn');
 
         // Initialize canvas
         canvas.width = CANVAS_SIZE;
@@ -641,6 +691,7 @@
                     selectedPixel = { x: pixelX, y: pixelY };
                     updatePixelInfo(pixelX, pixelY);
                     placeBtn.disabled = !currentUser;
+                    reportBtn.disabled = !currentUser;
                     drawBoard();
                 }
             }
@@ -742,6 +793,11 @@
                     currentUser.credits = result.new_balance;
                     creditDisplay.textContent = `Credits: ${result.new_balance.toLocaleString()}`;
                     
+                    // Store for undo
+                    lastPlacementId = result.placement_id;
+                    lastPlacementTime = Date.now();
+                    undoBtn.disabled = false;
+                    
                     // Update local board data
                     const existingIndex = boardData.findIndex(p => p.x === selectedPixel.x && p.y === selectedPixel.y);
                     const newPixel = {
@@ -776,6 +832,88 @@
                 }, 1000);
             }
         });
+
+        // Undo button
+        undoBtn.addEventListener('click', async () => {
+            if (!currentUser || !lastPlacementId) return;
+            
+            // Check if still within undo window
+            if (Date.now() - lastPlacementTime > UNDO_WINDOW_MS) {
+                showNotification('Undo window expired (5 minutes)', 'error');
+                undoBtn.disabled = true;
+                return;
+            }
+            
+            undoBtn.disabled = true;
+            
+            try {
+                const response = await fetch(`${API_BASE}/undo/${lastPlacementId}?user_id=${currentUser.user_id}`, {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showNotification(`Undone! Cost: ${result.undo_cost} credits`, 'success');
+                    currentUser.credits = result.new_balance;
+                    creditDisplay.textContent = `Credits: ${result.new_balance.toLocaleString()}`;
+                    
+                    // Reload board
+                    await loadBoard();
+                    lastPlacementId = null;
+                } else {
+                    showNotification(result.detail || 'Undo failed', 'error');
+                    undoBtn.disabled = false;
+                }
+            } catch (error) {
+                showNotification('Network error', 'error');
+                undoBtn.disabled = false;
+            }
+        });
+
+        // Report button
+        reportBtn.addEventListener('click', async () => {
+            if (!currentUser || !selectedPixel) return;
+            
+            const reason = prompt('Reason for report (optional):');
+            if (reason === null) return; // User cancelled
+            
+            reportBtn.disabled = true;
+            
+            try {
+                const response = await fetch(`${API_BASE}/report?user_id=${currentUser.user_id}&x=${selectedPixel.x}&y=${selectedPixel.y}&reason=${encodeURIComponent(reason)}`, {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    if (result.board_frozen) {
+                        showNotification(`Reported! Board frozen (${result.report_count} reports)`, 'error');
+                    } else {
+                        showNotification(`Pixel reported (${result.report_count}/${2500} this week)`, 'success');
+                    }
+                } else {
+                    showNotification(result.detail || 'Report failed', 'error');
+                }
+            } catch (error) {
+                showNotification('Network error', 'error');
+            } finally {
+                setTimeout(() => {
+                    reportBtn.disabled = false;
+                }, 2000);
+            }
+        });
+
+        // Check undo window periodically
+        setInterval(() => {
+            if (lastPlacementId && lastPlacementTime) {
+                if (Date.now() - lastPlacementTime > UNDO_WINDOW_MS) {
+                    undoBtn.disabled = true;
+                    lastPlacementId = null;
+                }
+            }
+        }, 1000);
 
         // Zoom controls
         document.getElementById('zoomIn').addEventListener('click', () => {
