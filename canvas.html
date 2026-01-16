@@ -385,7 +385,7 @@
             <div class="section">
                 <h3>Selected Pixel</h3>
                 <div class="pixel-info" id="pixelInfo">
-                    <p class="no-pixel-selected">Hover over a pixel</p>
+                    <p class="no-pixel-selected">Click a pixel to select it</p>
                 </div>
             </div>
 
@@ -409,9 +409,6 @@
         let zoomLevel = 1;
         let panX = 0;
         let panY = 0;
-        let isPanning = false;
-        let lastPanX = 0;
-        let lastPanY = 0;
 
         // DOM elements
         const canvas = document.getElementById('pixelCanvas');
@@ -528,7 +525,7 @@
             ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
             
             // Draw grid for zoomed view
-            if (zoomLevel > 8) {
+            if (zoomLevel > 4) {
                 ctx.strokeStyle = 'rgba(0, 255, 255, 0.1)';
                 ctx.lineWidth = 0.5 / zoomLevel;
                 const pixelSize = CANVAS_SIZE / BOARD_SIZE;
@@ -556,48 +553,131 @@
                 );
             });
             
+            // Highlight selected pixel
+            if (selectedPixel && zoomLevel > 2) {
+                ctx.strokeStyle = '#00ffff';
+                ctx.lineWidth = 2 / zoomLevel;
+                ctx.shadowColor = '#00ffff';
+                ctx.shadowBlur = 10 / zoomLevel;
+                ctx.strokeRect(
+                    selectedPixel.x * pixelSize,
+                    selectedPixel.y * pixelSize,
+                    pixelSize,
+                    pixelSize
+                );
+                ctx.shadowBlur = 0;
+            }
+            
             ctx.restore();
         }
 
         // Canvas mouse events
-        canvas.addEventListener('mousemove', (e) => {
-            if (isPanning) {
-                panX += e.movementX;
-                panY += e.movementY;
-                drawBoard();
-                return;
-            }
-
-            const rect = canvas.getBoundingClientRect();
-            const x = (e.clientX - rect.left - panX) / zoomLevel;
-            const y = (e.clientY - rect.top - panY) / zoomLevel;
-            const pixelX = Math.floor(x / (CANVAS_SIZE / BOARD_SIZE));
-            const pixelY = Math.floor(y / (CANVAS_SIZE / BOARD_SIZE));
-
-            if (pixelX >= 0 && pixelX < BOARD_SIZE && pixelY >= 0 && pixelY < BOARD_SIZE) {
-                selectedPixel = { x: pixelX, y: pixelY };
-                updatePixelInfo(pixelX, pixelY);
-                placeBtn.disabled = !currentUser;
-            }
-        });
+        let isDragging = false;
+        let dragStartX = 0;
+        let dragStartY = 0;
+        let hasMoved = false;
 
         canvas.addEventListener('mousedown', (e) => {
-            if (e.button === 1 || e.button === 2 || e.shiftKey) { // Middle click or right click or shift
-                isPanning = true;
+            if (e.button === 0) { // Left click
+                isDragging = true;
+                hasMoved = false;
+                const rect = canvas.getBoundingClientRect();
+                dragStartX = e.clientX - rect.left;
+                dragStartY = e.clientY - rect.top;
                 e.preventDefault();
             }
         });
 
-        canvas.addEventListener('mouseup', () => {
-            isPanning = false;
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            if (isDragging) {
+                const dx = mouseX - dragStartX;
+                const dy = mouseY - dragStartY;
+                
+                // If moved more than 3 pixels, consider it a drag
+                if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+                    hasMoved = true;
+                    canvas.style.cursor = 'grabbing';
+                }
+                
+                if (hasMoved) {
+                    panX += dx;
+                    panY += dy;
+                    dragStartX = mouseX;
+                    dragStartY = mouseY;
+                    drawBoard();
+                }
+                return;
+            }
+
+            // Just hovering - show which pixel would be selected
+            const x = (mouseX - panX) / zoomLevel;
+            const y = (mouseY - panY) / zoomLevel;
+            const pixelX = Math.floor(x / (CANVAS_SIZE / BOARD_SIZE));
+            const pixelY = Math.floor(y / (CANVAS_SIZE / BOARD_SIZE));
+
+            if (pixelX >= 0 && pixelX < BOARD_SIZE && pixelY >= 0 && pixelY < BOARD_SIZE) {
+                // Show pixel info on hover but don't select
+                updatePixelInfo(pixelX, pixelY);
+            }
+        });
+
+        canvas.addEventListener('mouseup', (e) => {
+            if (isDragging && !hasMoved && e.button === 0) {
+                // It was a click, not a drag - select the pixel
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                
+                const x = (mouseX - panX) / zoomLevel;
+                const y = (mouseY - panY) / zoomLevel;
+                const pixelX = Math.floor(x / (CANVAS_SIZE / BOARD_SIZE));
+                const pixelY = Math.floor(y / (CANVAS_SIZE / BOARD_SIZE));
+
+                if (pixelX >= 0 && pixelX < BOARD_SIZE && pixelY >= 0 && pixelY < BOARD_SIZE) {
+                    selectedPixel = { x: pixelX, y: pixelY };
+                    updatePixelInfo(pixelX, pixelY);
+                    placeBtn.disabled = !currentUser;
+                    drawBoard();
+                }
+            }
+            
+            isDragging = false;
+            hasMoved = false;
+            canvas.style.cursor = 'crosshair';
+        });
+
+        canvas.addEventListener('mouseleave', () => {
+            isDragging = false;
+            hasMoved = false;
+            canvas.style.cursor = 'crosshair';
         });
 
         canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
         canvas.addEventListener('wheel', (e) => {
             e.preventDefault();
+            
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            // Get world position before zoom
+            const worldX = (mouseX - panX) / zoomLevel;
+            const worldY = (mouseY - panY) / zoomLevel;
+            
+            // Update zoom
             const delta = e.deltaY > 0 ? 0.9 : 1.1;
-            zoomLevel = Math.max(0.5, Math.min(20, zoomLevel * delta));
+            const newZoom = Math.max(0.5, Math.min(20, zoomLevel * delta));
+            
+            // Adjust pan to keep mouse position fixed
+            panX = mouseX - worldX * newZoom;
+            panY = mouseY - worldY * newZoom;
+            
+            zoomLevel = newZoom;
             drawBoard();
         });
 
@@ -622,6 +702,18 @@
                     <p><strong>Cost:</strong> $${baseCost.toFixed(2)}</p>
                 `;
             }
+        }
+
+        // Center camera on a pixel
+        function centerOnPixel(x, y) {
+            const pixelSize = CANVAS_SIZE / BOARD_SIZE;
+            const worldX = (x + 0.5) * pixelSize;
+            const worldY = (y + 0.5) * pixelSize;
+            
+            panX = CANVAS_SIZE / 2 - worldX * zoomLevel;
+            panY = CANVAS_SIZE / 2 - worldY * zoomLevel;
+            
+            drawBoard();
         }
 
         // Place pixel
@@ -667,7 +759,12 @@
                         boardData.push(newPixel);
                     }
                     
-                    drawBoard();
+                    // Center camera on placed pixel if zoomed in
+                    if (zoomLevel > 2) {
+                        centerOnPixel(selectedPixel.x, selectedPixel.y);
+                    } else {
+                        drawBoard();
+                    }
                 } else {
                     showNotification(result.detail || 'Failed to place pixel', 'error');
                 }
