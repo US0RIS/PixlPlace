@@ -246,3 +246,187 @@ Phase 3 will add:
 - Ad labeling enforcement
 - Dynamic price cap logic
 - Reporting + freeze mechanism
+
+# Pixel Canvas - Phase 3: Advanced Rules
+
+## What's New in Phase 3
+
+### 1. UNDO System ⏪
+- **Time Window**: 5 minutes to undo after placement
+- **Cost**: 25% of original placement cost
+- **Escalation**: Each undo increases the next undo cost by +10% of original
+- **Reset**: Escalation counter resets weekly
+- **Not a Refund**: Undo costs credits, doesn't refund them
+- **UI**: Yellow "Undo Last Placement" button appears after placing
+- **Auto-disable**: Button disables after 5 minutes
+
+### 2. Ad Labeling & Penalties 📢
+- **Visual Effect**: Ad pixels appear 50% less saturated (visual not yet implemented in UI)
+- **Overwrite Discount**: Ads are 10% cheaper to overwrite
+- **Violation Tracking**: Users who mislabel ads get tracked (penalties TBD)
+- **Database**: `ad_violation_count` field added to users table
+
+### 3. Dynamic Price Cap (Enhanced) 💰
+- Already implemented in Phase 1, now verified working:
+  - Starts at $2.00 per pixel
+  - Drops to $1.50 when 100 pixels reach cap
+  - Resets weekly
+
+### 4. Reporting & Freeze System 🚨
+- **User Reports**: Anyone can report inappropriate pixels
+- **Threshold**: 2,500 reports in a week triggers board freeze
+- **Freeze**: No new placements allowed until weekly reset
+- **UI**: Pink "Report Pixel" button in sidebar
+- **Stats**: Report count visible in `/stats` endpoint
+
+## Database Changes
+
+### Updated Tables:
+
+**users** - Added:
+- `undo_escalation_count` (tracks undo usage)
+- `ad_violation_count` (tracks ad mislabeling)
+
+**placements** - Added:
+- `can_undo` (whether placement can still be undone)
+- `previous_color` (for restoring on undo)
+- `previous_owner_id` (for restoring on undo)
+
+**New Table: reports**
+- `reporter_user_id`
+- `pixel_x`, `pixel_y`
+- `reason`
+- `reported_at`
+
+**global_state** - Added:
+- `board_frozen` (whether board accepts placements)
+
+## New API Endpoints
+
+### `POST /undo/{placement_id}?user_id={user_id}`
+Undo a recent placement.
+
+**Response:**
+```json
+{
+  "success": true,
+  "undo_cost": 250,
+  "new_balance": 499750,
+  "message": "Placement undone (cost: 250 credits)"
+}
+```
+
+**Errors:**
+- 403: Not your placement / Board frozen
+- 400: Undo window expired / Cannot undo
+- 402: Insufficient credits
+- 404: Placement not found
+
+### `POST /report?user_id={user_id}&x={x}&y={y}&reason={reason}`
+Report a pixel for inappropriate content.
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Report submitted",
+  "board_frozen": false,
+  "report_count": 1542
+}
+```
+
+If threshold reached:
+```json
+{
+  "success": true,
+  "message": "Report submitted. Board frozen (2501 reports this week)",
+  "board_frozen": true,
+  "report_count": 2501
+}
+```
+
+### Updated `/stats` Endpoint
+Now includes:
+```json
+{
+  "board_frozen": false,
+  "reports_this_week": 1542,
+  "report_threshold": 2500
+}
+```
+
+## UI Changes
+
+### Canvas Page Updates:
+1. **Undo Button** (yellow)
+   - Appears after pixel placement
+   - Shows for 5 minutes
+   - Displays undo cost on use
+   
+2. **Report Button** (pink outline)
+   - Enabled when pixel selected and logged in
+   - Prompts for optional reason
+   - Shows current report count
+
+3. **Visual Feedback**
+   - Success/error notifications for all actions
+   - Credit balance updates in real-time
+   - Board state reflected immediately
+
+## Weekly Reset Enhanced
+
+The weekly reset now:
+1. Resets pixel cost levels to 0
+2. Resets price cap to $2.00
+3. **NEW:** Resets undo escalation for all users
+4. **NEW:** Unfreezes the board
+5. **NEW:** Clears report history (implicitly - reports older than week_start are ignored)
+
+## Testing Phase 3
+
+### Test Undo:
+1. Login with test user
+2. Place a pixel (costs 1000 credits)
+3. Click "Undo Last Placement" within 5 minutes
+4. Should cost 250 credits (25%)
+5. Place another pixel, undo again
+6. Second undo should cost 350 credits (25% + 10%)
+
+### Test Reporting:
+1. Login and select any pixel
+2. Click "Report Pixel"
+3. Enter optional reason
+4. Check `/stats` endpoint - report_count should increase
+5. (To test freeze, would need to submit 2,500 reports)
+
+### Test Ad Discount:
+1. Place a pixel marked as "Advertisement"
+2. Try to overwrite it
+3. Cost should be ~10% less than normal
+
+### Test Board Freeze:
+1. Submit 2,500+ reports (can do programmatically via API)
+2. Try to place a pixel
+3. Should get 403 error: "Board is frozen"
+4. Trigger weekly reset (or wait)
+5. Board unfreezes automatically
+
+## What's NOT in Phase 3
+
+- Visual saturation effect for ads (CSS filter needed)
+- Ad verification/moderation system
+- Penalties for repeat ad violations
+- Leaderboards (Phase 4)
+- Archives (Phase 4)
+- Stripe integration (future)
+
+## Phase 3 Complete ✅
+
+All advanced rules implemented:
+- ✅ Undo with escalating costs
+- ✅ Ad labeling with overwrite discount
+- ✅ Dynamic price cap (from Phase 1)
+- ✅ Reporting with freeze threshold
+- ✅ Weekly resets include all new features
+
+**Next: Phase 4** will add Archives & Leaderboards
