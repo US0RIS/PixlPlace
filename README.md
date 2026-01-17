@@ -430,3 +430,284 @@ All advanced rules implemented:
 - ✅ Weekly resets include all new features
 
 **Next: Phase 4** will add Archives & Leaderboards
+
+# Pixel Canvas - Phase 4: Archives & Leaderboards
+
+## What's New in Phase 4
+
+### 1. Leaderboards 🏆
+- **Top Contributors**: Ranked by lifetime paid placements
+- **Live Rankings**: Updates in real-time
+- **Medal System**: 🥇🥈🥉 for top 3
+- **Full Stats**: Username, placements, join date
+- **Accessible**: `/leaderboards.html`
+
+### 2. Archives 🗄️
+- **Weekly Snapshots**: Automatic board capture at each reset
+- **Visual Gallery**: Grid view with thumbnails
+- **Full Details**: Click any archive to see full board
+- **Statistics**: Placements, contributors, votes per week
+- **Modal View**: Large canvas display in popup
+
+### 3. Monthly Voting 🗳️
+- **Vote System**: Users can vote for best canvas of the month
+- **One Vote Per Month**: Per user restriction
+- **Vote Tracking**: See vote counts on archives
+- **API Endpoints**: `/vote` and `/monthly-winner/{year}/{month}`
+
+### 4. Reward System 💰
+- **Winner Rewards**: Top contributor of winning canvas gets free credits
+- **Reward Amount**: 100,000 credits ($1 worth)
+- **6-Month Cooldown**: Can't win again for 6 months
+- **Automatic**: Credits awarded via `/monthly-winner` endpoint
+
+## Database Changes
+
+### New Tables:
+
+**archives**
+- `id` - Archive identifier
+- `week_start` - Week start timestamp
+- `week_end` - Week end timestamp
+- `snapshot_data` - JSON of all pixels
+- `total_placements` - Placements that week
+- `unique_contributors` - Unique users
+- `archived_at` - When snapshot was created
+
+**votes**
+- `id` - Vote identifier
+- `user_id` - Who voted
+- `archive_id` - Which archive
+- `month`, `year` - Voting period
+- `voted_at` - Vote timestamp
+- UNIQUE constraint on (user_id, month, year)
+
+**users** - Added:
+- `last_reward_month` - Track reward cooldown (format: "YYYY-MM")
+
+## New API Endpoints
+
+### `GET /leaderboard?limit=50`
+Get top contributors.
+
+**Response:**
+```json
+{
+  "leaderboard": [
+    {
+      "rank": 1,
+      "username": "alice",
+      "placements": 15230,
+      "joined": "2026-01-10T12:00:00"
+    }
+  ]
+}
+```
+
+### `GET /archives`
+Get all archived snapshots.
+
+**Response:**
+```json
+{
+  "archives": [
+    {
+      "id": 1,
+      "week_start": "2026-01-10T00:00:00",
+      "week_end": "2026-01-17T00:00:00",
+      "total_placements": 5420,
+      "unique_contributors": 87,
+      "archived_at": "2026-01-17T00:05:00"
+    }
+  ]
+}
+```
+
+### `GET /archives/{archive_id}`
+Get specific archive with full pixel data.
+
+**Response:**
+```json
+{
+  "id": 1,
+  "week_start": "...",
+  "week_end": "...",
+  "pixels": [
+    {"x": 100, "y": 100, "color": "#FF0000", "owner_id": 1, "is_ad": false}
+  ],
+  "total_placements": 5420,
+  "unique_contributors": 87,
+  "votes": 142
+}
+```
+
+### `GET /archives/monthly/{year}/{month}`
+Get all archives from a specific month (for voting).
+
+**Response:**
+```json
+{
+  "year": 2026,
+  "month": 1,
+  "archives": [
+    {
+      "id": 1,
+      "week_start": "...",
+      "week_end": "...",
+      "total_placements": 5420,
+      "unique_contributors": 87,
+      "votes": 142
+    }
+  ]
+}
+```
+
+### `POST /vote?user_id={user_id}&archive_id={archive_id}`
+Vote for an archive in monthly voting.
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Vote recorded"
+}
+```
+
+**Errors:**
+- 400: Already voted this month
+- 404: User or archive not found
+
+### `GET /monthly-winner/{year}/{month}`
+Get the winning archive and award credits to top contributor.
+
+**Response:**
+```json
+{
+  "year": 2026,
+  "month": 1,
+  "archive_id": 3,
+  "votes": 245,
+  "winner": {
+    "user_id": 5,
+    "username": "bob",
+    "placements": 892,
+    "reward_given": true,
+    "reward_amount": 100000,
+    "cooldown_active": false
+  }
+}
+```
+
+If no winner:
+```json
+{
+  "year": 2026,
+  "month": 1,
+  "winner": null,
+  "message": "No votes yet"
+}
+```
+
+## New Pages
+
+### `/leaderboards.html`
+- Full leaderboard table
+- Top 100 contributors
+- Rank, username, placements, join date
+- Responsive design
+- Medal emojis for top 3
+
+### `/archives.html`
+- Grid gallery of all archives
+- Clickable cards with previews
+- Modal popup for full view
+- Vote counts displayed
+- Weekly stats
+
+## How It Works
+
+### Archive Creation (Automatic)
+1. Weekly reset triggers `check_and_reset_week()`
+2. Calls `create_archive_snapshot()` before resetting
+3. Snapshots all pixels to JSON
+4. Counts placements and contributors
+5. Stores in `archives` table
+6. Then proceeds with reset
+
+### Voting Process (Manual)
+1. View archives from a specific month
+2. Vote for favorite via API
+3. One vote per user per month
+4. Votes stored in `votes` table
+
+### Reward Distribution (Manual/Automated)
+1. Call `/monthly-winner/{year}/{month}`
+2. Finds archive with most votes
+3. Identifies top contributor from that week
+4. Checks 6-month cooldown
+5. Awards 100,000 credits if eligible
+6. Updates `last_reward_month`
+
+## Testing Phase 4
+
+### Test Leaderboards:
+1. Visit `/leaderboards.html`
+2. Should show all users with paid placements
+3. Sorted by placement count
+
+### Test Archives (after first reset):
+1. Trigger a weekly reset (wait 7 days or manipulate DB)
+2. Visit `/archives.html`
+3. Click an archive card
+4. Should show full board in modal
+
+### Test Voting:
+```bash
+# Vote for archive ID 1 as user 1
+curl -X POST "http://localhost:5000/vote?user_id=1&archive_id=1"
+
+# Try voting again (should fail)
+curl -X POST "http://localhost:5000/vote?user_id=1&archive_id=1"
+```
+
+### Test Monthly Winner:
+```bash
+# Get winner for January 2026
+curl "http://localhost:5000/monthly-winner/2026/1"
+```
+
+## File Structure
+
+```
+/
+├── main.py (updated with Phase 4 endpoints)
+├── index.html (landing page)
+├── canvas.html (pixel placement)
+├── leaderboards.html (NEW - full leaderboard page)
+├── archives.html (NEW - archive gallery)
+├── pixelcanvas.db (database with new tables)
+└── README_PHASE4.md (this file)
+```
+
+## Important Notes
+
+1. **First Archive**: Won't exist until first weekly reset
+2. **Voting**: Requires existing archives
+3. **Rewards**: Only given once per 6 months per user
+4. **Cooldown**: Tracked in `users.last_reward_month`
+5. **Snapshots**: Include all pixel data (can be large)
+
+## Phase 4 Complete ✅
+
+All features implemented:
+- ✅ Automatic weekly snapshots
+- ✅ Leaderboards with live data
+- ✅ Archive gallery with previews
+- ✅ Monthly voting system
+- ✅ Reward distribution with cooldown
+
+**Project Complete!** All 4 phases done. Ready for production deployment with:
+- Stripe integration for real payments
+- User authentication
+- Hosting on proper infrastructure
+
